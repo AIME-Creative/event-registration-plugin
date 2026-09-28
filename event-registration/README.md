@@ -80,7 +80,9 @@ Put this shortcode on a page and set that page to **Password protected** (Page �
 [event_registration_staff]
 ```
 
-The form **lists every event straight from the database**, so events you create in future need no setup — they simply appear in the dropdown. Pick the event, fill in the registrant, choose how the money is being handled, and submit; it then clears itself ready for the next person while staying on the same event.
+The form **lists every event straight from the database**, so events you create in future need no setup — they simply appear in the dropdown. Pick the event, choose the ticket, fill in the registrant and the event's own questions, choose how the money is being handled, and submit; it then clears itself ready for the next person while staying on the same event.
+
+It deliberately offers no overrides — no amount box, no promo box, no sync toggles. The registration is priced and handled exactly as a public one would be, so the only decision is the three-way payment choice. (The admin screen keeps those overrides for the cases that need them.)
 
 It records who added each registration (a required "Your name" field), shown in the admin list and the CSV.
 

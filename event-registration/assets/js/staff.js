@@ -1,9 +1,10 @@
 /* Event Registration — staff form (add a registrant without taking payment).
  *
  * The shell is rendered by the shortcode; this fills in the parts that depend
- * on which event was chosen (tickets, add-ons, custom fields) and posts the
- * result. Prices shown here are an on-screen estimate from list prices — the
- * amount that gets recorded is always computed on the server.
+ * on which event was chosen (tickets, add-ons, registration questions) and
+ * posts the result. The price shown here is an on-screen estimate from list
+ * prices — the amount recorded is always computed on the server, priced
+ * exactly as a public registration would be.
  */
 (function () {
 	'use strict';
@@ -26,9 +27,9 @@
 		loading: form.querySelector('.evr-staff-loading'),
 		details: form.querySelector('.evr-staff-details'),
 		person: form.querySelector('.evr-staff-person'),
+		custom: form.querySelector('.evr-staff-custom'),
 		payment: form.querySelector('.evr-staff-payment'),
 		meta: form.querySelector('.evr-staff-meta'),
-		promo: form.querySelector('.evr-staff-promo'),
 		estimate: form.querySelector('.evr-staff-estimate'),
 		actions: form.querySelector('.evr-staff-actions'),
 		submit: form.querySelector('.evr-staff-submit'),
@@ -91,6 +92,7 @@
 
 	function buildDetails(data) {
 		els.details.innerHTML = '';
+		els.custom.innerHTML = '';
 		current = data;
 
 		if (data.test_mode) {
@@ -104,12 +106,11 @@
 			var wrap = el('label', { class: 'evr-staff-field' });
 			wrap.appendChild(el('span', {}, 'Ticket'));
 			var select = el('select', { name: 'ticket_key', class: 'evr-staff-ticket' });
-			select.appendChild(el('option', { value: '' }, '— none (set the amount below) —'));
+			select.appendChild(el('option', { value: '' }, '— no ticket —'));
 			mains.forEach(function (t) {
-				var opt = el('option', { value: t.key, 'data-cents': t.current_price_cents }, labelFor(t));
-				select.appendChild(opt);
+				select.appendChild(el('option', { value: t.key, 'data-cents': t.current_price_cents }, labelFor(t)));
 			});
-			// Pre-select when there is only one real choice.
+			// Pre-select when there is only one choice to make.
 			if (mains.length === 1) { select.value = mains[0].key; }
 			wrap.appendChild(select);
 			els.details.appendChild(wrap);
@@ -120,17 +121,17 @@
 			box.appendChild(el('span', {}, 'Add-ons'));
 			addons.forEach(function (a) {
 				var row = el('label', { class: 'evr-staff-check' });
-				var input = el('input', { type: 'checkbox', class: 'evr-staff-addon', value: a.key, 'data-cents': a.current_price_cents });
-				row.appendChild(input);
+				row.appendChild(el('input', { type: 'checkbox', class: 'evr-staff-addon', value: a.key, 'data-cents': a.current_price_cents }));
 				row.appendChild(document.createTextNode(' ' + labelFor(a)));
 				box.appendChild(row);
 			});
 			els.details.appendChild(box);
 		}
 
+		// The event's own form questions, shown under the registrant's details.
 		if (data.fields.length) {
 			var fieldset = el('fieldset', { class: 'evr-staff-group' });
-			fieldset.appendChild(el('legend', {}, 'Form fields'));
+			fieldset.appendChild(el('legend', {}, 'Registration questions'));
 			data.fields.forEach(function (f) {
 				var wrap = el('label', { class: 'evr-staff-field' });
 				wrap.appendChild(el('span', {}, f.label));
@@ -150,12 +151,12 @@
 				fieldset.appendChild(wrap);
 			});
 			fieldset.appendChild(el('p', { class: 'evr-staff-hint' }, 'These feed the event’s GoHighLevel field mappings. None are required here.'));
-			els.details.appendChild(fieldset);
+			els.custom.appendChild(fieldset);
 		}
 
-		show(els.promo, !!data.has_promos);
 		show(els.details, true);
 		show(els.person, true);
+		show(els.custom, data.fields.length > 0);
 		show(els.payment, true);
 		show(els.meta, true);
 		show(els.actions, true);
@@ -165,22 +166,15 @@
 	function selectedTicketCents() {
 		var select = form.querySelector('.evr-staff-ticket');
 		if (!select || !select.value) { return 0; }
-		var opt = select.options[select.selectedIndex];
-		return parseInt(opt.getAttribute('data-cents'), 10) || 0;
+		return parseInt(select.options[select.selectedIndex].getAttribute('data-cents'), 10) || 0;
 	}
 
 	function updateEstimate() {
 		if (!current) { return; }
 		var state = form.querySelector('input[name="payment_state"]:checked');
-		var override = form.querySelector('input[name="amount"]').value.trim();
 
 		if (state && state.value === 'comp') {
 			els.estimate.textContent = 'Recorded as ' + money(0, current.currency) + ' (comped).';
-			show(els.estimate, true);
-			return;
-		}
-		if (override !== '') {
-			els.estimate.textContent = 'Recorded as ' + money(Math.round(parseFloat(override) * 100) || 0, current.currency) + ' (your override).';
 			show(els.estimate, true);
 			return;
 		}
@@ -189,14 +183,15 @@
 		form.querySelectorAll('.evr-staff-addon:checked').forEach(function (cb) {
 			cents += parseInt(cb.getAttribute('data-cents'), 10) || 0;
 		});
-		els.estimate.textContent = 'About ' + money(cents, current.currency) + ' at list price — the exact figure is worked out on submit, after their membership discount and any promo code.';
+		els.estimate.textContent = 'About ' + money(cents, current.currency) + ' at list price — the exact figure is worked out on submit, after their membership discount.';
 		show(els.estimate, true);
 	}
 
 	function resetEvent() {
 		current = null;
 		els.details.innerHTML = '';
-		[els.details, els.person, els.payment, els.meta, els.actions, els.estimate].forEach(function (node) { show(node, false); });
+		els.custom.innerHTML = '';
+		[els.details, els.person, els.custom, els.payment, els.meta, els.actions, els.estimate].forEach(function (node) { show(node, false); });
 	}
 
 	els.event.addEventListener('change', function () {
@@ -222,9 +217,6 @@
 			updateEstimate();
 		}
 	});
-	form.addEventListener('input', function (e) {
-		if (e.target.matches('input[name="amount"]')) { updateEstimate(); }
-	});
 
 	/* ---------- Submit ---------- */
 
@@ -240,10 +232,7 @@
 			phone: form.querySelector('input[name="phone"]').value.trim(),
 			added_by: form.querySelector('input[name="added_by"]').value.trim(),
 			note: form.querySelector('input[name="note"]').value.trim(),
-			amount: form.querySelector('input[name="amount"]').value.trim(),
-			payment_state: (form.querySelector('input[name="payment_state"]:checked') || {}).value || 'invoiced',
-			sync_ghl: form.querySelector('input[name="sync_ghl"]').checked ? '1' : '',
-			force_duplicate: form.querySelector('input[name="force_duplicate"]').checked ? '1' : ''
+			payment_state: (form.querySelector('input[name="payment_state"]:checked') || {}).value || 'invoiced'
 		};
 
 		if (!data.first_name || !data.last_name || !data.email) {
@@ -257,8 +246,6 @@
 
 		var ticket = form.querySelector('.evr-staff-ticket');
 		data.ticket_key = ticket ? ticket.value : '';
-		var promo = form.querySelector('input[name="promo_code"]');
-		data.promo_code = promo && !els.promo.hidden ? promo.value.trim() : '';
 
 		data.addon_keys = Array.prototype.map.call(
 			form.querySelectorAll('.evr-staff-addon:checked'),
@@ -293,15 +280,13 @@
 
 			// Clear the person but keep the event, so a run of registrations
 			// for the same event is quick to enter.
-			['first_name', 'last_name', 'email', 'phone', 'note', 'amount'].forEach(function (name) {
+			['first_name', 'last_name', 'email', 'phone', 'note'].forEach(function (name) {
 				var input = form.querySelector('[name="' + name + '"]');
 				if (input) { input.value = ''; }
 			});
 			form.querySelectorAll('[data-field]').forEach(function (input) {
 				if (input.type === 'checkbox') { input.checked = false; } else { input.value = ''; }
 			});
-			var dup = form.querySelector('input[name="force_duplicate"]');
-			if (dup) { dup.checked = false; }
 			updateEstimate();
 			form.querySelector('input[name="first_name"]').focus();
 		}).catch(function () {

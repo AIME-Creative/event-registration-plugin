@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Event Registration
  * Description: Event registration with embedded Stripe checkout, Supabase membership-tier discounts, and GoHighLevel pipeline sync.
- * Version: 1.21.0
+ * Version: 1.21.1
  * Author: AIME Group
  * License: GPL-2.0+
  * Text Domain: event-registration
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EVR_VERSION', '1.21.0' );
+define( 'EVR_VERSION', '1.21.1' );
 define( 'EVR_PLUGIN_FILE', __FILE__ );
 define( 'EVR_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'EVR_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

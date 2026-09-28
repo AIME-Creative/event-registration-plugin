@@ -225,18 +225,13 @@ class EVR_Staff {
 						<p class="evr-staff-hint">Their membership tier is looked up automatically from their email, so a member's discount is priced in.</p>
 					</fieldset>
 
+					<div class="evr-staff-custom" hidden></div>
+
 					<fieldset class="evr-staff-group evr-staff-payment" hidden>
 						<legend>Payment</legend>
 						<?php foreach ( EVR_Manual::payment_states() as $val => $label ) : ?>
 							<label class="evr-staff-radio"><input type="radio" name="payment_state" value="<?php echo esc_attr( $val ); ?>" <?php checked( 'invoiced', $val ); ?>> <?php echo esc_html( $label ); ?></label>
 						<?php endforeach; ?>
-						<div class="evr-staff-cols">
-							<label class="evr-staff-field"><span>Amount</span>
-								<input type="number" name="amount" min="0" step="0.01" placeholder="auto">
-								<small>Leave blank to use the ticket price (with their member discount and any promo code). Enter a figure to override it — e.g. what you actually invoiced.</small>
-							</label>
-							<label class="evr-staff-field evr-staff-promo" hidden><span>Promo code</span><input type="text" name="promo_code"></label>
-						</div>
 						<div class="evr-staff-estimate" hidden></div>
 					</fieldset>
 
@@ -246,8 +241,6 @@ class EVR_Staff {
 							<label class="evr-staff-field"><span>Your name</span><input type="text" name="added_by" required></label>
 							<label class="evr-staff-field"><span>Note</span><input type="text" name="note" placeholder="e.g. Invoice #1042"><small>Internal only — never shown to the registrant.</small></label>
 						</div>
-						<label class="evr-staff-check"><input type="checkbox" name="sync_ghl" value="1" checked> Send to GoHighLevel</label>
-						<label class="evr-staff-check"><input type="checkbox" name="force_duplicate" value="1"> Add even if this email is already registered for the event</label>
 					</fieldset>
 
 					<div class="evr-staff-actions" hidden>
@@ -301,20 +294,21 @@ class EVR_Staff {
 		}
 
 		wp_send_json_success( array(
-			'title'      => $event['title'],
-			'status'     => $event['status'],
-			'currency'   => strtoupper( $config['currency'] ?: 'usd' ),
-			'tickets'    => $tickets,
-			'fields'     => $fields,
-			'has_promos' => ! empty( $config['promo_codes'] ),
-			'test_mode'  => 'live' !== EVR_Settings::event_mode( $event ),
+			'title'     => $event['title'],
+			'status'    => $event['status'],
+			'currency'  => strtoupper( $config['currency'] ?: 'usd' ),
+			'tickets'   => $tickets,
+			'fields'    => $fields,
+			'test_mode' => 'live' !== EVR_Settings::event_mode( $event ),
 		) );
 	}
 
 	/**
 	 * Create the registration. All validation and pricing happens in
 	 * EVR_Manual::create() — the same code the admin screen and the REST
-	 * endpoint use.
+	 * endpoint use. The form chooses only the event, the registrant and how
+	 * the money is being handled; everything else follows the event's own
+	 * rules, exactly as a public registration would.
 	 */
 	public static function staff_register() {
 		self::verify_request();
@@ -322,10 +316,6 @@ class EVR_Staff {
 		if ( ! self::throttle() ) {
 			wp_send_json_error( array( 'message' => 'Too many registrations added from here in the last hour. Please try again shortly.' ), 429 );
 		}
-
-		// Blank amount = price it from the ticket; "0" is a real override.
-		$raw_amount   = trim( (string) wp_unslash( $_POST['amount'] ?? '' ) );
-		$amount_cents = '' === $raw_amount ? null : (int) round( (float) $raw_amount * 100 );
 
 		$fields = array();
 		foreach ( (array) ( $_POST['fields'] ?? array() ) as $key => $value ) {
@@ -340,14 +330,16 @@ class EVR_Staff {
 			'phone'           => wp_unslash( $_POST['phone'] ?? '' ),
 			'ticket_key'      => wp_unslash( $_POST['ticket_key'] ?? '' ),
 			'addon_keys'      => (array) ( $_POST['addon_keys'] ?? array() ),
-			'promo_code'      => wp_unslash( $_POST['promo_code'] ?? '' ),
 			'payment_state'   => wp_unslash( $_POST['payment_state'] ?? 'invoiced' ),
-			'amount_cents'    => $amount_cents,
 			'note'            => wp_unslash( $_POST['note'] ?? '' ),
 			'added_by'        => wp_unslash( $_POST['added_by'] ?? '' ),
 			'fields'          => $fields,
-			'sync_ghl'        => ! empty( $_POST['sync_ghl'] ),
-			'force_duplicate' => ! empty( $_POST['force_duplicate'] ),
+			// Deliberately not settable from this form: it follows the same
+			// flow as a public registration — priced from the ticket, always
+			// synced to GHL, duplicates governed by the event's own setting.
+			'amount_cents'    => null,
+			'sync_ghl'        => true,
+			'force_duplicate' => false,
 			'source'          => 'staff',
 		) );
 
