@@ -1,0 +1,143 @@
+/* Event Registration — staff form (internal, behind a page password).
+   Deliberately plain: this is a back-office tool, not a marketing page, so it
+   inherits the theme's font and stays legible on light or dark backgrounds. */
+
+.evr-staff {
+	max-width: 760px;
+	margin: 0 auto;
+	font-size: 16px;
+	line-height: 1.5;
+}
+
+.evr-staff-title { margin: 0 0 4px; }
+.evr-staff-intro { margin: 0 0 20px; opacity: 0.8; font-size: 14px; }
+.evr-staff-empty { padding: 16px; background: rgba(127, 127, 127, 0.08); border-radius: 6px; }
+
+.evr-staff-warn {
+	padding: 14px 16px;
+	border: 1px solid #f0c36d;
+	border-left-width: 4px;
+	border-radius: 4px;
+	background: #fdf6e3;
+	color: #6b5326;
+}
+.evr-staff-warn p { margin: 0; }
+.evr-staff-warn code { background: rgba(0, 0, 0, 0.06); padding: 1px 5px; border-radius: 3px; }
+
+.evr-staff-group {
+	margin: 0 0 18px;
+	padding: 14px 16px;
+	border: 1px solid rgba(127, 127, 127, 0.35);
+	border-radius: 6px;
+}
+.evr-staff-group legend {
+	padding: 0 6px;
+	font-size: 13px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	opacity: 0.7;
+}
+
+.evr-staff-field { display: block; margin-bottom: 14px; }
+.evr-staff-field > span {
+	display: block;
+	margin-bottom: 4px;
+	font-size: 14px;
+	font-weight: 600;
+}
+.evr-staff-field > small {
+	display: block;
+	margin-top: 4px;
+	font-size: 12px;
+	opacity: 0.75;
+	font-weight: 400;
+}
+.evr-staff input[type="text"],
+.evr-staff input[type="email"],
+.evr-staff input[type="number"],
+.evr-staff input[type="date"],
+.evr-staff select,
+.evr-staff textarea {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 9px 10px;
+	font: inherit;
+	font-size: 15px;
+	color: inherit;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(127, 127, 127, 0.5);
+	border-radius: 4px;
+}
+.evr-staff input:focus,
+.evr-staff select:focus,
+.evr-staff textarea:focus {
+	outline: 2px solid rgba(47, 123, 255, 0.6);
+	outline-offset: 1px;
+}
+
+/* Two fields side by side, stacking on narrow screens. */
+.evr-staff-cols { display: flex; gap: 14px; flex-wrap: wrap; }
+.evr-staff-cols > .evr-staff-field { flex: 1 1 220px; }
+
+.evr-staff-radio,
+.evr-staff-check {
+	display: block;
+	margin-bottom: 6px;
+	font-size: 15px;
+	cursor: pointer;
+}
+.evr-staff-radio input,
+.evr-staff-check input { margin-right: 6px; }
+
+.evr-staff-hint { margin: 4px 0 0; font-size: 13px; opacity: 0.75; }
+.evr-staff-loading { padding: 10px 0; opacity: 0.7; }
+
+.evr-staff-estimate {
+	margin-top: 10px;
+	padding: 9px 12px;
+	background: rgba(47, 123, 255, 0.1);
+	border-radius: 4px;
+	font-size: 14px;
+}
+.evr-staff-test {
+	margin-bottom: 14px;
+	padding: 9px 12px;
+	background: #fdf6e3;
+	color: #6b5326;
+	border-radius: 4px;
+	font-size: 14px;
+}
+
+.evr-staff-submit {
+	padding: 11px 22px;
+	font: inherit;
+	font-size: 16px;
+	font-weight: 600;
+	cursor: pointer;
+	color: var(--evr-button-text, #16204e);
+	background: var(--evr-button-bg, #ffffff);
+	border: 1px solid rgba(127, 127, 127, 0.5);
+	border-radius: 4px;
+}
+.evr-staff-submit:disabled { opacity: 0.6; cursor: default; }
+
+.evr-staff-message {
+	margin-top: 14px;
+	font-size: 15px;
+}
+.evr-staff-message:empty { margin-top: 0; }
+.evr-staff-message.evr-staff-success,
+.evr-staff-message.evr-staff-error,
+.evr-staff-message.evr-staff-warn {
+	padding: 11px 14px;
+	border-radius: 4px;
+	border-left: 4px solid;
+}
+.evr-staff-message.evr-staff-success { background: #e8f5ea; border-color: #2e7d32; color: #1b5e20; }
+.evr-staff-message.evr-staff-warn { background: #fdf6e3; border-color: #c9a227; color: #6b5326; }
+.evr-staff-message.evr-staff-error { background: #fdecea; border-color: #c62828; color: #8c1d18; }
+
+@media (max-width: 600px) {
+	.evr-staff-cols { display: block; }
+}

@@ -1,0 +1,294 @@
+.evr-form {
+	max-width: 920px;
+	margin: 0 auto;
+	font-size: 16px;
+	font-family: var(--evr-font, inherit);
+	color: var(--evr-text, inherit);
+}
+
+/* Two-column layout; rows marked .evr-full span both columns. */
+.evr-reg-form {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	column-gap: 26px;
+}
+.evr-reg-form .evr-full { grid-column: 1 / -1; }
+
+@media (max-width: 640px) {
+	.evr-reg-form { grid-template-columns: 1fr; }
+}
+
+.evr-test-banner {
+	background: #fff3cd;
+	color: #856404;
+	border: 1px solid #ffeeba;
+	border-radius: 6px;
+	padding: 8px 12px;
+	margin-bottom: 16px;
+	font-size: 14px;
+	text-align: center;
+}
+
+.evr-waitlist-notice {
+	background: #eef1fb;
+	color: #3f4699;
+	border: 1px solid #d9defa;
+	border-radius: 6px;
+	padding: 10px 14px;
+	margin-bottom: 16px;
+	font-size: 15px;
+	text-align: center;
+}
+
+.evr-row { margin-bottom: 18px; }
+
+.evr-form label {
+	display: block;
+	font-weight: 600;
+	font-size: 14px;
+}
+
+.evr-form input[type="text"],
+.evr-form input[type="email"],
+.evr-form input[type="tel"],
+.evr-form input[type="date"],
+.evr-form select,
+.evr-form textarea {
+	width: 100%;
+	padding: 10px 12px;
+	margin-top: 4px;
+	border: 1px solid var(--evr-border, #ccc);
+	border-radius: 6px;
+	font-size: 16px;
+	box-sizing: border-box;
+}
+
+.evr-form input[type="text"]:focus,
+.evr-form input[type="email"]:focus,
+.evr-form input[type="tel"]:focus,
+.evr-form input[type="date"]:focus,
+.evr-form select:focus,
+.evr-form textarea:focus {
+	border-color: var(--evr-accent, #16204e);
+	outline: none;
+}
+
+/* Muted placeholder so an empty field doesn't look already filled in. */
+.evr-form input::placeholder,
+.evr-form textarea::placeholder {
+	color: var(--evr-placeholder, #9aa0a6);
+	opacity: 1; /* Firefox dims placeholders by default; keep our color exact. */
+}
+
+/* Dropdowns use a real empty <option>, not a placeholder attribute, so grey
+   the control while that empty option is selected; keep the open list readable. */
+.evr-form select.evr-select-placeholder {
+	color: var(--evr-placeholder, #9aa0a6);
+}
+.evr-form select option {
+	color: #1a1a1a;
+}
+
+.evr-email-note {
+	margin-top: 6px;
+	color: #c81e45;
+	font-weight: 700;
+	font-size: 13px;
+}
+
+.evr-tier-badge {
+	display: inline-block;
+	margin-top: 6px;
+	padding: 3px 10px;
+	background: #e7f5ec;
+	color: #1d7044;
+	border-radius: 12px;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+/* Verified member: green pill (default). Non-member: neutral pill + prompt. */
+.evr-tier-none {
+	background: #f1f1f1;
+	color: #555;
+}
+.evr-member-cta {
+	margin-top: 6px;
+	font-size: 13px;
+}
+.evr-member-link {
+	display: inline-block;
+	margin-top: 4px;
+	padding: 6px 12px;
+	border: 1px solid currentColor;
+	border-radius: 6px;
+	font-weight: 700;
+	text-decoration: underline;
+	cursor: pointer;
+}
+.evr-member-link:hover {
+	text-decoration: none;
+	opacity: 0.85;
+}
+
+.evr-tickets, .evr-addons {
+	border: 1px solid #e0e0e0;
+	border-radius: 8px;
+	padding: 12px 16px;
+}
+.evr-tickets legend, .evr-addons legend { font-weight: 700; padding: 0 6px; }
+
+.evr-ticket-option {
+	display: flex !important;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 4px;
+	font-weight: 500 !important;
+	cursor: pointer;
+	border-bottom: 1px solid #f0f0f0;
+}
+.evr-ticket-option:last-child { border-bottom: none; }
+.evr-ticket-option input { width: auto !important; margin: 0; }
+.evr-ticket-price { margin-left: auto; font-weight: 700; white-space: nowrap; }
+.evr-ticket-price s { color: #999; font-weight: 400; margin-left: 6px; }
+.evr-soldout { opacity: 0.5; cursor: not-allowed; }
+.evr-soldout-tag { font-size: 12px; color: #b32d2e; font-weight: 700; }
+
+.evr-promo { display: flex; align-items: flex-end; gap: 8px; }
+.evr-promo label { flex: 1; }
+.evr-apply-promo {
+	padding: 10px 16px;
+	border: 1px solid #ccc;
+	background: #f7f7f7;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.evr-summary-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin: 16px 0;
+	font-size: 15px;
+}
+.evr-summary-table td { padding: 6px 0; border-bottom: 1px solid #f0f0f0; }
+.evr-summary-table td:last-child { text-align: right; }
+.evr-summary-table .evr-total td { font-weight: 700; font-size: 17px; border-bottom: none; padding-top: 10px; }
+
+/* Payment plan (installments) choice — selectable cards + schedule. */
+.evr-plan-choice {
+	margin: 4px 0 16px;
+	--evr-plan-accent: #2f7bff; /* selection color; visible on light or dark forms */
+}
+.evr-plan-title {
+	font-weight: 700;
+	font-size: 14px;
+	margin-bottom: 12px;
+}
+
+.evr-plan-cards {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+}
+@media (max-width: 560px) { .evr-plan-cards { grid-template-columns: 1fr; } }
+
+.evr-plan-card {
+	border: 1.5px solid var(--evr-border, #ccc);
+	border-radius: 10px;
+	padding: 14px 16px;
+	cursor: pointer;
+	transition: border-color .15s, background .15s;
+}
+.evr-plan-card:focus-visible { outline: 2px solid var(--evr-plan-accent); outline-offset: 2px; }
+.evr-plan-card.evr-selected { border-color: var(--evr-plan-accent); background: rgba(47, 123, 255, .10); }
+.evr-plan-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.evr-plan-card-name { font-weight: 700; font-size: 14px; }
+.evr-plan-check {
+	width: 18px; height: 18px;
+	border-radius: 50%;
+	border: 2px solid var(--evr-border, #ccc);
+	flex: none;
+	box-sizing: border-box;
+}
+.evr-plan-card.evr-selected .evr-plan-check {
+	border-color: var(--evr-plan-accent);
+	background: var(--evr-plan-accent);
+	box-shadow: inset 0 0 0 3px rgba(47, 123, 255, .18);
+}
+.evr-plan-card-price { font-size: 22px; font-weight: 700; margin-top: 10px; letter-spacing: -.02em; }
+.evr-plan-card-note { font-size: 12.5px; margin-top: 3px; opacity: .7; }
+
+.evr-plan-note { font-size: 14px; margin-bottom: 10px; }
+.evr-plan-schedule {
+	margin-top: 14px;
+	padding-top: 14px;
+	border-top: 1px solid var(--evr-border, #e0e0e0);
+	font-size: 14px;
+}
+.evr-plan-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 4px 0;
+}
+.evr-plan-row span:nth-child(2) { margin-left: auto; font-weight: 600; white-space: nowrap; }
+.evr-plan-row span:last-child { white-space: nowrap; min-width: 104px; text-align: right; opacity: .7; }
+
+.evr-payment-element { margin: 16px 0; }
+
+.evr-submit {
+	width: 100%;
+	padding: 16px 24px;
+	background: var(--evr-button-bg, #fff);
+	color: var(--evr-button-text, #16204e);
+	border: none;
+	border-radius: 999px;
+	font-size: 17px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	cursor: pointer;
+}
+
+.evr-consent label {
+	display: flex !important;
+	align-items: flex-start;
+	gap: 12px;
+	font-weight: 600 !important;
+	font-size: 15px;
+	line-height: 1.5;
+	cursor: pointer;
+}
+.evr-consent input[type="checkbox"] {
+	width: 18px;
+	height: 18px;
+	margin-top: 3px;
+	flex-shrink: 0;
+}
+.evr-submit:hover { opacity: 0.9; }
+.evr-submit:disabled, .evr-submit.evr-busy { opacity: 0.6; cursor: wait; }
+
+.evr-error {
+	background: #fdecea;
+	color: #b32d2e;
+	border-radius: 6px;
+	padding: 10px 14px;
+	margin: 12px 0;
+	font-size: 14px;
+}
+
+.evr-success {
+	background: #e7f5ec;
+	color: #1d7044;
+	border-radius: 8px;
+	padding: 24px;
+	text-align: center;
+	font-size: 17px;
+	font-weight: 600;
+}
+
+.evr-closed p {
+	background: #f7f7f7;
+	border-radius: 8px;
+	padding: 20px;
+	text-align: center;
+}
