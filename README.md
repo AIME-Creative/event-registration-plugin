@@ -1,124 +1,323 @@
-# event-registration-plugin
+# Event Registration
 
-WordPress event registration plugin with embedded Stripe checkout, Supabase membership-tier discounts, and GoHighLevel pipeline sync.
+A single-purpose WordPress plugin that runs paid event registration end to end:
+an embedded Stripe checkout on the site's own page, membership-tier pricing
+looked up from Supabase, optional installment plans, and a two-way push into a
+GoHighLevel sales pipeline.
 
-## Install
+It is a bespoke plugin for one organisation — not a distributable product. It is
+installed by uploading a zip, it is not listed on wordpress.org, and it makes no
+attempt to be generic.
 
-1. Zip the `event-registration` folder (or use the provided zip) and upload via **Plugins → Add New → Upload Plugin**, then activate.
-2. Two database tables are created automatically (`wp_evr_events`, `wp_evr_registrations`). **No new Supabase table is needed** — registrations are stored in WordPress; Supabase is only read for membership lookups.
+**Current version: 1.21.1.** This document orients a developer reading the code;
+`event-registration/README.md` is the operator-facing "how to use it" guide.
 
-## Setup (one time)
+---
 
-Go to **Event Registration → Settings**:
+## At a glance
 
-**Stripe** — paste your test and live publishable/secret keys. The Mode toggle sets the global default (keys, product catalog, checkout) — no code changes ever. Each event can also override this individually via its "Stripe account" setting, so one event can run live while another tests in the sandbox. A colored badge on every admin page shows the current mode, and the front-end shows a "Test mode" banner when in sandbox.
+| | |
+| --- | --- |
+| Type | WordPress plugin, single directory, installed from a zip |
+| Dependencies | **None.** No Composer, no npm, no bundler, no build step |
+| Third-party SDKs | None — Stripe, GoHighLevel and Supabase are called over plain REST with `wp_remote_*` |
+| Storage | Two custom tables (not custom post types) |
+| Front end | `assets/js/checkout.js` and `assets/js/staff.js`, both vanilla; Stripe.js is the only external script |
+| Admin | `assets/js/admin.js`, jQuery + `wp-color-picker` + `jquery-ui-sortable` |
+| Requires | WordPress 5.8+ (the header uses `Update URI`). No PHP floor is declared; the code uses 7.x-era syntax throughout |
+| Entry point | `event-registration.php` — requires every class, then `init()`s them on `plugins_loaded` |
 
-**Webhooks** — in the Stripe Dashboard (do this in both test and live mode), add a webhook endpoint pointing at the URL shown on the Settings page (`/wp-json/evr/v1/stripe-webhook`) with events `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded` — and, if you use **payment plans**, also `invoice.paid`, `invoice.payment_failed`, `invoice.marked_uncollectible`. Paste each signing secret into Settings. Registrations are only marked **confirmed** when Stripe confirms payment; refunds in Stripe automatically mark the registration **refunded**.
+Everything is procedural-ish PHP in static classes. There is no autoloader, no
+dependency injection and no test suite; each class is `require_once`d in order
+and calls into the others directly by name.
 
-**Supabase** — project URL, service role key (kept server-side), table/column names. Tier values are matched case-insensitively and "Processor" variants map to the base tier automatically (e.g. "Elite Processor" → Elite discount).
+---
 
-**GoHighLevel** — your default Private Integration token. Events in other sub-accounts can override the token per event.
+## What it actually does
 
-**Appearance** — set the form's font and colors (Register button background and text, body/label text, input border, and accent used for input focus). These are global defaults for every form; leave a color blank to inherit your theme. Each event can override any of them under its own **Appearance (this event)** section in the editor, so one event can look different from another with no code changes.
+An **event** is a row with a JSON config blob: its tickets and add-ons, pricing
+windows, membership discounts, promo codes, custom form fields, GoHighLevel
+pipeline mapping, waitlist rules, payment-plan terms and per-event appearance.
+Events are edited in wp-admin and dropped onto a page with a shortcode.
 
-## Creating an event
+A **registration** is a row capturing one person's answers, what they were
+charged, how they paid, and how far the GoHighLevel sync got.
 
-**Event Registration → Add Event**:
+Around that core sit the things that make it non-trivial:
 
-- **Tickets & Add-ons** — click "Load Stripe products" to pick products from your catalog (price auto-fills from the product's default price; this is the regular price). A simple registration fee = one Main ticket; the front-end then shows no ticket picker at all. Add multiple Main tickets for ticket choices; Add-ons appear only after a main ticket is selected. Optional per-ticket capacity (sold out automatically).
-- **Pricing Periods** — any number of time-based prices per ticket, e.g. Early Bird 1 until March 1, Early Bird 2 until April 1, then regular price. Membership discounts are always calculated off the regular price, and by default the registrant automatically gets whichever saving is larger — the period price or their member discount — never both. Tick **"While an early-bird pricing period is active, ignore membership tier discounts"** to instead have the active period price always win (member discounts are skipped while a period is running); promo codes still apply. The toggle is per-event and off by default.
-- **Tier discounts** — fixed $ or % off the main ticket per tier, shown in the order summary as e.g. "Premium member discount (10% off)" (Premium / Elite / VIP, Processor variants included).
-- **Promo codes** — fixed or %, with optional max uses and expiry.
-- **GoHighLevel** — per-event Location ID, then "Load pipelines" to pick the pipeline and stage (or paste IDs manually). Confirmed registrants are upserted as contacts (with tags) and dropped into the pipeline as an opportunity with the amount paid as monetary value. Optionally set an **Abandoned cart stage** (same pipeline): a registration left unpaid for 24 hours is pushed to that stage by an hourly background job so you can follow up; when the person later completes payment, the same opportunity automatically moves to your registered stage (no duplicate). The 24-hour delay can be changed via the `evr_abandoned_cart_delay` filter. For events with a **Payment Plan** (below), you can also set a **Payment plan: Outstanding stage** and a **Payment plan: Fully paid stage** (same pipeline): registrants who choose the plan land in the Outstanding stage on their first payment instead of the registered stage, and the same opportunity moves automatically to the Fully paid stage once the final installment is collected. Leave the Outstanding stage blank to use the normal registered stage; leave Fully paid blank to keep them in Outstanding.
-- **Custom Form Fields** — add any questions and map each to a GHL field. Each field can be shown conditionally via **Show when**: pick "Show when ALL/ANY match", then add rules like `Attending = Yes`. Controlling fields must be a Dropdown or Checkbox (for a checkbox, match the value `Yes` or use "is not empty / checked"); operators are equals, does not equal, is one of (comma-separated), and is not empty/checked. Conditions can chain (a conditional field can control another), and hidden fields are never required and aren't submitted. Reorder fields by dragging the handle. The picker includes standard contact fields (company name, address, website, etc.) and opportunity source out of the box; "Load GHL fields" pulls the location's contact and opportunity custom fields too. Mapped opportunity fields are written onto the opportunity; everything else goes on the contact record.
-- **UTM Tracking** — `utm_source/medium/campaign/term/content` on the visitor's link are captured automatically (and survive payment redirects), saved with each registration, exported in the CSV, and can be mapped per event to any GHL field — ideal for tracking whose affiliate link drove a signup.
-- **Payment Plan** — optionally let registrants split the total into a fixed number of automatic payments (e.g. two). Set the **number of payments**, the **interval** (every N months or days), an optional **minimum total** below which the plan isn't offered, and a **"Final payment due by"** date. The total is split evenly (any rounding cent goes onto the first payment), including add-ons and discounts. If the schedule couldn't finish before the "final payment due by" date — e.g. the event is now too close — the plan option **disappears from the form automatically** and full payment is required (also enforced server-side).
+- **Server-authoritative pricing.** The browser gets quotes for display only;
+  every amount is recomputed from the event config at payment time.
+- **Membership discounts** resolved by an email lookup against Supabase, so a
+  member is recognised without logging in anywhere.
+- **Time-based pricing periods** (stacked early-bird windows) that interact with
+  membership discounts under an explicit "never stack, larger wins" rule.
+- **Payment plans** — first installment charged on the page, the rest collected
+  by a daily cron as Stripe invoices, with early payoff and cancellation.
+- **Pipeline sync** that moves one GoHighLevel opportunity through stages as the
+  registration's state changes, rather than creating duplicates.
+- **Manual registration** for people invoiced outside the system, via three
+  entry points that share one implementation.
+- **Test/live Stripe switching** per event, so one event can run in the sandbox
+  while the rest take real money on the same site.
 
-  **How installments are collected:** the **first payment** is taken on the page today via the Payment Element and the card is saved to a Stripe **Customer** (set as their default). Each **later installment** is issued on its due date (by a daily background job) as a **Stripe invoice** with `collection_method=charge_automatically`, so Stripe auto-charges the saved card, emails a receipt, hosts an invoice page, and — on a decline — runs its own **retry/dunning** and emails the customer a link to update their card. Only `invoice.marked_uncollectible` (Stripe giving up) marks the plan **defaulted** in the plugin. `evr_plan_completed` fires once every payment is collected; `evr_installment_failed` fires on terminal failure.
+---
 
-  **Customers can change the card** used for upcoming installments via the **Stripe Customer Portal** (or the link in Stripe's dunning email); because invoices bill the customer's *current default* card, a change is picked up automatically. **Your team** can assist from the Stripe dashboard, or from the registrations list: each plan registration shows the full installment schedule (amount, status, hosted-invoice link), a **"Manage card"** button that generates a single-use portal link to send/use on a call, and a **"View in Stripe"** link. The CSV adds Plan Status / Paid / Installments columns.
+## Architecture
 
-  **Paying off early:** on a plan registration, the team can click **"Send invoice for remaining balance"** — this emails the customer a single Stripe invoice (hosted pay page, any card) for everything still owed. While it's outstanding the scheduled auto-charges **pause**; when the customer pays it, all remaining installments are marked paid, the plan **completes**, and the GHL "Fully paid" move runs. Any auto-charge invoice already mid-collection is voided first so nothing double-charges. If the customer never pays the payoff invoice (it's voided/expires), the normal auto-charge schedule simply resumes. The due window is filterable via `evr_payoff_days_until_due` (default 7 days).
+`event-registration.php` defines constants, requires all 13 classes, registers
+activation/deactivation hooks and cron schedules, then initialises on
+`plugins_loaded` (which also runs the schema upgrade check).
 
-  **Required Stripe setup for payment plans** (in both test and live): add the webhook events **`invoice.paid`**, **`invoice.payment_failed`**, and **`invoice.marked_uncollectible`** to your endpoint (alongside the existing `payment_intent.*` / `charge.refunded`); **activate the Customer Portal** (Settings → Billing → Customer portal) with payment-method updates enabled; and turn on Stripe's customer receipt + failed-payment emails and retry schedule (Billing settings).
-- **Registration window** — open/close dates; outside the window the form shows a closed message.
-- **Waitlist** — optionally show the same form as a waitlist (no payment) before registration opens and/or when all main tickets hit capacity. Waitlist signups sync to GHL into their own stage — usually in the same pipeline, or a different pipeline if you choose. Entries appear with **waitlist** status in the registrations list and CSV.
-
-Publish by setting Status to **Active**, then place the form anywhere with the shortcode shown on the Events list:
-
-```
-[event_registration id="123"]
-```
-
-Checkout happens entirely on your page via the Stripe Payment Element (cards, Apple Pay/Google Pay where enabled in Stripe). If the total is $0 (free event or fully discounted), payment is skipped.
-
-## Registrations
-
-**Event Registration → Registrations** — per-event list with payment status, membership tier, GHL sync status (with one-click **Retry** on failures), and a **Download CSV** button. Custom field answers are flattened into their own CSV columns. Test-mode registrations are flagged so they never mix with live data.
-
-Duplicate confirmed registrations per email are blocked by default (toggle per event).
-
-### Adding someone manually (no payment collected)
-
-For registrants you invoice separately, comp, or who paid some other way, open **"+ Add a registrant manually"** on the Registrations screen. It creates a confirmed registration without touching Stripe — they count on the roster, in the CSV and against ticket capacity, and they sync to GoHighLevel like anyone else. Sold-out tickets and a closed registration window are ignored here.
-
-Each manual add picks how it's being handled for money:
-
-| Payment handling | Amount recorded | GoHighLevel stage |
+| Class | File | Responsibility |
 | --- | --- | --- |
-| Invoiced separately — not yet paid | owed (nothing collected) | the event's **Outstanding payment** stage, if one is set |
-| Already paid (outside the site) | collected in full | the event's normal registered stage |
-| Comped — no charge | $0 | the event's normal registered stage |
+| `EVR_DB` | `class-evr-db.php` | Schema, all SQL, event/registration accessors, conditional-field evaluation |
+| `EVR_Settings` | `class-evr-settings.php` | Global options, Stripe mode resolution, appearance token resolution |
+| `EVR_Pricing` | `class-evr-pricing.php` | **The money.** Quote computation, pricing periods, promo validation, registration windows, waitlist state |
+| `EVR_Stripe` | `class-evr-stripe.php` | Stripe REST client, webhook signature verification |
+| `EVR_Supabase` | `class-evr-supabase.php` | Membership tier lookup over PostgREST |
+| `EVR_GHL` | `class-evr-ghl.php` | GoHighLevel v2 client, contact/opportunity sync, stage routing, abandoned-cart sweep |
+| `EVR_Installments` | `class-evr-installments.php` | Payment-plan schedule, the charging sweep, payoff, cancellation |
+| `EVR_Ajax` | `class-evr-ajax.php` | Public checkout endpoints, admin helper endpoints, CSV export |
+| `EVR_Webhook` | `class-evr-webhook.php` | Stripe webhook route; `confirm_registration()`, the single confirmation path |
+| `EVR_Admin` | `class-evr-admin.php` | All of wp-admin: events list, event editor, registrations list, settings |
+| `EVR_Shortcode` | `class-evr-shortcode.php` | Public form shell + the localized config the front end reads |
+| `EVR_Staff` | `class-evr-staff.php` | Password-gated staff form for manual registrations |
+| `EVR_Manual` | `class-evr-manual.php` | Shared implementation behind all three manual-registration entry points |
 
-The ticket is priced exactly as the checkout would price it — membership tier lookup, pricing periods and promo codes all apply — or you can type an amount to override it. An invoiced registration gets a **Mark paid** button that records the money and moves the GHL opportunity out of the Outstanding stage.
+**The two files that matter most in review** are `class-evr-pricing.php` (it
+decides what people are charged) and `class-evr-installments.php` (it charges
+cards off-session, on a schedule, without a human watching).
 
-### A staff page your team can use (no WordPress accounts)
+---
 
-Put this shortcode on a page and set that page to **Password protected** (Page → Visibility), then share the password with your team:
+## Data model
 
+Two tables, versioned by `EVR_DB::SCHEMA_VERSION` and applied with `dbDelta`.
+Migrations are additive only — columns are added, nothing is dropped or
+rewritten — and the upgrade runs automatically on `plugins_loaded` whenever the
+stored version differs.
+
+**`{prefix}evr_events`** — `id`, `title`, `status` (`draft|active|closed`),
+`config` (LONGTEXT JSON), timestamps.
+
+Everything configurable about an event lives in that JSON blob, merged over
+`EVR_DB::default_config()` on read. That keeps schema churn to almost nothing at
+the cost of no queryability inside a config — acceptable here, since events are
+counted in dozens and always loaded whole.
+
+**`{prefix}evr_registrations`** — one row per person per event. Contact fields,
+resolved `tier`, ticket/add-ons, custom field answers and UTM tags as JSON,
+`amount_cents`/`amount_paid_cents`, the Stripe identifiers, `plan_status` plus
+the `payment_plan` schedule JSON, the GoHighLevel identifiers and sync state,
+and the manual-entry columns (`source`, `payment_state`, `added_by`,
+`admin_note`).
+
+`status` is the master state: `pending → confirmed`, or `failed`, `refunded`,
+`waitlist`. A `pending` row is created *before* Stripe is touched, so an
+abandoned checkout is still a record the abandoned-cart sweep can act on.
+
+---
+
+## Request flows
+
+### Public checkout
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant W as WordPress
+    participant S as Stripe
+    B->>W: check_membership (email) → tier from Supabase
+    B->>W: quote (display only)
+    B->>W: prepare_checkout
+    W->>W: recompute price, write pending registration
+    B->>W: create_intent
+    W->>S: create PaymentIntent (amount from the DB row)
+    B->>S: confirm payment (Payment Element)
+    S-->>W: webhook payment_intent.succeeded
+    W->>W: confirm_registration() → promo usage, GHL sync
+    B->>W: client_confirm (fallback, idempotent)
 ```
-[event_registration_staff]
-```
 
-The form **lists every event straight from the database**, so events you create in future need no setup — they simply appear in the dropdown. Pick the event, choose the ticket, fill in the registrant and the event's own questions, choose how the money is being handled, and submit; it then clears itself ready for the next person while staying on the same event.
+Two details worth understanding:
 
-It deliberately offers no overrides — no amount box, no promo box, no sync toggles. The registration is priced and handled exactly as a public one would be, so the only decision is the three-way payment choice. (The admin screen keeps those overrides for the cases that need them.)
+- **The PaymentIntent is created late, deliberately.** `prepare_checkout` writes
+  the registration but touches nothing in Stripe; the intent is minted only when
+  someone actually submits payment. Abandoned form-fills therefore leave no
+  Incomplete PaymentIntents littering the Stripe dashboard. A retried card
+  reuses the existing intent rather than minting a second one.
+- **The webhook is authoritative; the client confirm is a backstop.** Both funnel
+  into `EVR_Webhook::confirm_registration()`, which is idempotent and is the
+  *only* place a registration becomes `confirmed`.
 
-It records who added each registration (a required "Your name" field), shown in the admin list and the CSV.
+### Payment plans
 
-The form **refuses to render on a page with no password**, so it can't be published wide open by mistake — an admin viewing such a page sees an explanation instead. Every submission re-checks the gate server-side, and submissions are rate-limited.
+The first installment is a normal on-page payment with `setup_future_usage`, so
+the card is saved to a Stripe Customer and made their default. Installments 2+
+are issued on their due dates by the daily `evr_installment_sweep` as
+`charge_automatically` invoices — which hands Stripe the retries, dunning emails
+and hosted payment page instead of reimplementing them.
 
-| Attribute | Default | What it does |
+Consequences a reviewer should hold onto: a missed cron run never drops a
+payment (the sweep picks up anything past due on the next run); only
+`invoice.marked_uncollectible` defaults a plan; and an outstanding payoff
+invoice pauses the sweep until it is paid or voided.
+
+### Manual registration
+
+Three entry points — the admin panel, the staff shortcode page, and a REST
+endpoint — all call `EVR_Manual::create()`, which writes a `pending` row and
+then runs it through the same `confirm_registration()` as a paid registration.
+Only `source` differs. Nothing in this path touches Stripe.
+
+---
+
+## Trust boundaries
+
+Every externally reachable entry point and what guards it:
+
+| Surface | Actions | Guard |
 | --- | --- | --- |
-| `require_login` | `no` | `yes` gates on a WordPress login instead of the page password |
-| `capability` | `edit_posts` | With `require_login="yes"`, which users qualify |
-| `status` | *(all)* | e.g. `active` to list only active events |
-| `title` | Add a registration | The heading above the form |
+| Public AJAX | `evr_check_membership`, `evr_quote`, `evr_prepare_checkout`, `evr_create_intent`, `evr_register_free`, `evr_client_confirm`, `evr_join_waitlist` | `evr_public` nonce; all amounts recomputed server-side |
+| Staff AJAX | `evr_staff_config`, `evr_staff_register` | `evr_staff` nonce + HMAC-signed page token + page-password (or login) check + per-IP throttle |
+| Admin AJAX | Stripe/GHL lookups, GHL retry, portal link, payoff, installment cancel, mark-paid | `manage_options` **and** `evr_admin` nonce |
+| `admin_post` | Save/delete event, delete registration, add registration, save settings, CSV export | `manage_options` **and** nonce |
+| REST | `POST evr/v1/stripe-webhook` | Stripe signature, `hash_equals` against either the live or test signing secret |
+| REST | `POST evr/v1/manual-registration` | Shared key compared with `hash_equals`; blank key disables the route entirely |
 
-### Letting a GoHighLevel form add registrants
+Principles the code holds to, worth checking are still true after any change:
 
-**Settings → Manual registrations** exposes the same thing as a REST endpoint, so a GHL form's workflow can create registrations directly with a **Custom Webhook** action. Note the trade-off: a GHL workflow has to be told which `event_id` to use, so it needs updating for every new event — the staff page above avoids that entirely.
+- **The browser never decides an amount.** Quotes are display-only; `create_intent`
+  reads the amount from the stored registration row, never from the request.
+- **The browser never decides a membership tier.** It is always re-looked-up from
+  the email server-side, even though the front end also queries it for display.
+- **All SQL lives in `EVR_DB`**, every dynamic value goes through
+  `$wpdb->prepare()`, and writes use `$wpdb->insert/update/delete`.
+- **The staff form's page identity is signed**, not passed as a bare post ID —
+  otherwise the password check could be pointed at any unprotected page.
+- The Supabase service-role key and Stripe secret keys are server-side only and
+  never reach the localized front-end config.
+
+---
+
+## Integrations
+
+**Stripe.** Direct REST calls, no SDK. Test and live keys are both stored, and
+the active mode is a global setting that any event can override — so a draft
+event can run through the sandbox on a live site. Tickets store a product ID for
+*both* catalogs, so flipping an event's mode needs no re-picking. Webhooks are
+accepted if they verify against either mode's signing secret.
+
+**GoHighLevel** (API v2). A registration upserts a contact, then creates or
+updates a single opportunity whose pipeline stage is derived from the
+registration's state — waitlist, abandoned cart, registered, outstanding
+payment, fully paid. Because it *updates* rather than recreates, an abandoned
+cart that later pays moves stage instead of duplicating.
+
+One non-obvious rule: **tags are never sent in the contact upsert body.** That
+field replaces the contact's entire tag array, which silently wiped tags set by
+workflows or by other events. They go through the additive
+`POST /contacts/{id}/tags` endpoint instead, which is idempotent and therefore
+safe across the several re-syncs a registration triggers.
+
+**Supabase.** A single PostgREST query resolving an email to a membership tier,
+with table and column names configurable. Tier strings like "Premium Processor"
+normalise down to their base tier.
+
+---
+
+## Background jobs
+
+| Hook | Schedule | Job |
+| --- | --- | --- |
+| `evr_abandoned_cart_sweep` | hourly | Push registrations still `pending` after 24h into the event's abandoned-cart stage. Each is pushed once — the stamped opportunity ID excludes it next time |
+| `evr_installment_sweep` | daily | Issue and charge any payment-plan installment that has come due |
+
+Both are WP-Cron, which is traffic-driven, so the site is additionally pinged by
+an external cron service to guarantee same-day charging. The sweeps are
+idempotent and safe to run concurrently with that.
+
+---
+
+## Extension points
 
 ```
-POST /wp-json/evr/v1/manual-registration
-X-EVR-Key: <the shared key from Settings>
+Actions:  evr_registration_confirmed  ( $reg_id, $reg )
+          evr_waitlist_joined         ( $reg_id )
+          evr_manual_registration_added ( $reg_id, $payment_state, $source )
+          evr_plan_completed          ( $reg_id )
+          evr_installment_failed      ( $reg_id, $index, $error )
 
-{
-  "event_id": 12,
-  "email": "someone@example.com",
-  "first_name": "Jane",
-  "last_name": "Doe",
-  "phone": "555-0100",
-  "ticket_key": "tk_abc123",
-  "payment_state": "invoiced",
-  "note": "Invoice #1042"
-}
+Filters:  evr_abandoned_cart_delay    ( default DAY_IN_SECONDS )
+          evr_payoff_days_until_due   ( default 7 )
+          evr_plan_max_attempts       ( default 3 )
+          evr_webhook_endpoint_url    ( default: the pinned production URL )
 ```
 
-Everything except `event_id`, `email`, `first_name` and `last_name` is optional; the full payload is documented on the settings screen. A success returns HTTP 201 with the new `registration_id`; a duplicate email returns 409. **Leave the key blank to switch the endpoint off entirely.**
+There is no email sending anywhere in the plugin — receipts and dunning are left
+to Stripe. `evr_registration_confirmed` is the hook to use if that changes.
 
-## Notes
+---
 
-- Prices are always recomputed server-side at payment time; the browser is never trusted for amounts, tiers, or promo validity.
-- An `evr_registration_confirmed` action fires after each confirmed registration if you want to hook in confirmation emails or other integrations. Manual adds fire it too, plus their own `evr_manual_registration_added`.
-- The Stripe webhook is the authoritative confirmation path; a client-side fallback (verified against Stripe's API) covers webhook delays.
+## Decisions worth knowing before you judge the code
+
+- **The Stripe webhook URL is pinned to production** (`EVR_Webhook::ENDPOINT_URL`)
+  rather than derived from `rest_url()`, so staging installs display and use the
+  real endpoint instead of silently configuring their own. Staging overrides it
+  with an `EVR_WEBHOOK_URL` constant.
+- **`Update URI: false` is in the plugin header.** The slug `event-registration`
+  is unclaimed on wordpress.org; without this, a future plugin published at that
+  slug could make WordPress offer a bogus "update" that overwrites this one.
+- **The plugin folder must not be renamed.** WordPress keys `active_plugins` on
+  the folder path, so a rename silently deactivates it — taking down the public
+  form and the webhook route until it is reactivated.
+- **Config-as-JSON over more tables** — see *Data model* above.
+- **Stripe invoices over subscription schedules** for installments: it reuses
+  Stripe's dunning, retries and hosted pages, and was a far smaller change than
+  moving plans onto subscription schedules.
+- **No build step, by choice.** The plugin is installed by hand-uploading a zip;
+  a toolchain would add friction to every change for no benefit at this size.
+  `EVR_VERSION` is bumped on every release and cache-busts the enqueued assets.
+
+---
+
+## Repository layout
+
+```
+event-registration/          the plugin — this folder is what ships
+  event-registration.php     bootstrap, constants, cron registration
+  includes/                  13 classes, one file each
+  assets/{js,css}/           checkout, staff, admin
+  README.md                  operator guide (ships with the plugin)
+event-registration.zip       the installable build
+README.md                    this file
+CLAUDE.md                    working notes: decisions, staging gotchas, open items
+```
+
+Only `event-registration/` goes into the zip. Releases bump the version in two
+places that must stay in sync — the `Version:` header and the `EVR_VERSION`
+constant — since the constant is what cache-busts the front-end assets.
+
+---
+
+## Known limitations
+
+- **No automated tests, and no local runtime** for this project. Everything is
+  verified on a staging site against Stripe test keys, which means changes reach
+  review unrun. Treat the pricing and installment paths accordingly.
+- **No email of its own.** If Stripe's receipts and dunning ever stop being
+  enough, that is new work, not configuration.
+- **Capacity is advisory under concurrency.** Seats count confirmed rows plus
+  pending ones under an hour old; there is no lock, so a true race at the
+  capacity boundary can oversell by one.
+- **GoHighLevel failures are recorded, not retried automatically.** A failed sync
+  marks the row and surfaces a retry button in the admin.
+
+## A note on security scanners
+
+Wordfence flags this plugin as **CVE-2010-4839, "Event Registration < 6.00.03 —
+SQL Injection"**. It is a false positive: Wordfence matches on folder slug plus
+version, and the actual vulnerable product is an unrelated 2010 plugin that
+happened to use the same slug. The finding is slug-based, so no code change can
+clear it — it is marked ignored in the Wordfence dashboard. The code was audited
+for that bug class independently and is clean.
